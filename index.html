@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Piggy Planet 3.1 (Star Wars Edition)</title>
+    <title>Piggy Planet 3.5 (Ultimate Edition)</title>
     <style>
         /* --- 基础设置 --- */
         body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Segoe UI', sans-serif; user-select: none; }
@@ -104,13 +104,24 @@
         #photo-workbench { position: absolute; top: 50%; right: 20px; transform: translateY(-50%); width: 220px; background: rgba(40, 20, 60, 0.8); border: 2px solid #FFF; border-radius: 15px; padding: 15px; z-index: 20; color: #FFF; font-family: sans-serif; backdrop-filter: blur(5px); display: none; }
         #btn-toggle-wb { position: absolute; top: 20px; right: 20px; width: 40px; height: 40px; border-radius: 50%; background: rgba(20, 10, 30, 0.6); border: 2px solid #FFB7C5; color: #FFB7C5; font-size: 1.2rem; cursor: pointer; z-index: 21; display: none; align-items: center; justify-content: center; transition: all 0.3s; box-shadow: 0 0 10px rgba(255, 105, 180, 0.3); }
         #btn-toggle-wb:hover { background: #FFB7C5; color: #220022; transform: rotate(90deg); }
+        
+        /* Loading Overlay for Processing */
+        #loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 200; display: none; justify-content: center; align-items: center; color: #FFB7C5; flex-direction: column;}
+        .spinner { width: 50px; height: 50px; border: 5px solid #FFB7C5; border-top: 5px solid transparent; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 20px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
 
+    <!-- Loading Overlay -->
+    <div id="loading-overlay">
+        <div class="spinner"></div>
+        <div id="loading-text">正在处理照片... (0/0)</div>
+    </div>
+
     <!-- 1. 礼盒开场 -->
     <div id="intro-layer">
-        <div class="gift-box" onclick="openGift()">🎁</div>
+        <div class="gift-box" id="start-gift-btn">🎁</div>
     </div>
 
     <!-- 2. 星球大战字幕 -->
@@ -120,7 +131,7 @@
             A long time ago in a galaxy far, far away....
         </div>
         <div class="crawl-container" id="sw-crawl-container" style="opacity: 0;">
-            <div class="crawl-content" onanimationend="endIntro()">
+            <div class="crawl-content" id="crawl-text">
                 <h1>EPISODE I</h1>
                 <h2>THE PIGGY AWAKENS</h2>
                 <p>A long time ago... there was a mysterious, mist-shrouded planet.</p>
@@ -129,12 +140,12 @@
                 <p>Now, the force is strong with you. Use your hands to unlock the magic...</p>
             </div>
         </div>
-        <button class="skip-btn" onclick="endIntro()">SKIP >></button>
+        <button class="skip-btn" id="skip-intro-btn">SKIP >></button>
     </div>
 
     <!-- 3. 猪咪星球主界面 -->
     <div id="ui-layer">
-        <h1>🐷 Piggy Planet 3.1 🐱</h1>
+        <h1>🐷 Piggy Planet 3.5 🐱</h1>
         <div class="status">STATUS: <span id="sys-status">Initializing...</span></div>
         <div class="status">HANDS: <span id="gesture-state">Searching...</span></div>
     </div>
@@ -143,14 +154,11 @@
 
     <div id="workbench">
         <h3>✨ 猪咪总控台 ✨</h3>
-        <!-- 新增：总控亮度 -->
         <div class="control-group">
             <label style="color:#FFF; font-weight:bold;">🌟 整体亮度 (Master)<span id="val-master">1.0</span></label>
             <input type="range" id="sl-master" min="0" max="2" step="0.1" value="1.0">
         </div>
-        
         <div class="separator"></div>
-
         <div class="control-group"><label>毛绒亮度 (Glow)<span id="val-plush">0.5</span></label><input type="range" id="sl-plush" min="0" max="2" step="0.1" value="0.5"></div>
         <div class="control-group"><label>猫咪亮度 (Core)<span id="val-kitten">0.5</span></label><input type="range" id="sl-kitten" min="0" max="2" step="0.1" value="0.5"></div>
         <div class="control-group"><label>小猪大小 (Piggy)<span id="val-piggy">1.0</span></label><input type="range" id="sl-piggy" min="0.5" max="3" step="0.1" value="1.0"></div>
@@ -168,16 +176,14 @@
 
     <div id="controls">
         <label class="btn-upload">上传照片<input type="file" id="image-upload" multiple accept="image/*"></label>
-        <button class="btn-save" onclick="savePage()">💾 保存网页</button>
-        <button id="btn-start-cam" class="btn-cam" onclick="initMediaPipe()">📷 启动摄像头</button>
+        <button class="btn-save" id="btn-save-page">💾 保存网页</button>
+        <button id="btn-start-cam" class="btn-cam">📷 启动摄像头</button>
         <button id="btn-retry-cam" class="btn-retry">重试摄像头</button>
     </div>
 
-    <!-- 重要：添加 muted 和 autoplay 属性 -->
     <video id="video-preview" playsinline muted autoplay></video>
     <div id="canvas-container"></div>
     
-    <!-- 背景音乐 -->
     <audio id="bgm" loop>
         <source src="https://cdn.pixabay.com/download/audio/2022/03/24/audio_07823d069c.mp3?filename=space-120280.mp3" type="audio/mpeg">
     </audio>
@@ -209,7 +215,7 @@
             colors: [0xFFC0CB, 0xFFB7C5, 0xFF69B4, 0xFFFFFF, 0xFFE4E1], 
             plushBrightness: 0.5, kittenBrightness: 0.5, piggyScale: 1.0, cloudBrightness: 0.8,
             rainbowIntensity: 1.5, ambientIntensity: 2.0, spinSpeed: 0.5,
-            masterBrightness: 1.0, // 新增：总控亮度系数
+            masterBrightness: 1.0,
             bloomStrengthNormal: 1.2, bloomStrengthPhoto: 0.2, bloomThreshold: 0.3, bloomRadius: 0.5,
             pinchStart: 0.06, pinchEnd: 0.10, photoHoverDist: 22, 
             camRotSensitivity: 0.02, camDeadZone: 0.2, cursorDistance: 40,
@@ -223,8 +229,6 @@
         let cursorMesh, ambientLight;
         let bloomPass;
         let dummy = new THREE.Object3D();
-        
-        // Cache variables to improve performance
         let cachedPlushTexture = null; 
 
         const raycaster = new THREE.Raycaster();
@@ -237,36 +241,57 @@
         let videoElement, hands, cameraPipe; let handCentroid = new THREE.Vector2();
         let mediaPipeInitializing = false;
         let isCamActive = false;
-        
-        // 新增：防抖动时间戳
         let lastStateChangeTime = 0;
 
+        // --- Image Compression Tool ---
+        function compressImage(file, quality = 0.6, maxWidth = 512) {
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = (event) => {
+                    const img = new Image();
+                    img.src = event.target.result;
+                    img.onload = () => {
+                        const canvas = document.createElement('canvas');
+                        let width = img.width;
+                        let height = img.height;
+
+                        if (width > maxWidth) {
+                            height = (height * maxWidth) / width;
+                            width = maxWidth;
+                        }
+
+                        canvas.width = width;
+                        canvas.height = height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, width, height);
+                        resolve(canvas.toDataURL('image/jpeg', quality));
+                    };
+                };
+            });
+        }
+
         // --- Save Functionality ---
-        window.savePage = function() {
+        function savePage() {
             if (window.EMBEDDED_PHOTOS.length === 0) {
                 if(!confirm("还没上传照片哦，确定要保存空星球吗？")) return;
             }
             let html = document.documentElement.outerHTML;
             const dataString = JSON.stringify(window.EMBEDDED_PHOTOS);
-            
-            // 修复：使用正则表达式替换，兼容性更强（允许末尾没有分号的情况）
-            // 无论原代码是 window.EMBEDDED_PHOTOS = []; 还是 window.EMBEDDED_PHOTOS = ["..."]; 都能被正确覆盖。
             html = html.replace(/window\.EMBEDDED_PHOTOS\s*=\s*\[[\s\S]*?\];?/, `window.EMBEDDED_PHOTOS = ${dataString};`);
-            
             const blob = new Blob([html], { type: 'text/html' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url; a.download = 'piggy_planet_gift.html';
             document.body.appendChild(a); a.click(); document.body.removeChild(a);
-            alert("网页已保存！\n包含照片的独立文件已下载，您可以把这个文件发给对方。");
+            alert("网页已保存！\n照片已自动压缩，文件体积已优化。");
         };
 
         // --- Intro Logic ---
-        window.openGift = function() {
+        function openGift() {
             const bgm = document.getElementById('bgm');
             bgm.volume = 0.5;
-            bgm.play().catch(e => console.log("Audio autoplay blocked - User interaction required later"));
-
+            bgm.play().catch(e => console.log("Audio autoplay blocked"));
             document.getElementById('intro-layer').style.opacity = 0;
             setTimeout(() => {
                 document.getElementById('intro-layer').style.display = 'none';
@@ -278,32 +303,25 @@
             const layer = document.getElementById('starwars-layer');
             const introText = document.getElementById('sw-intro-text');
             const crawlContainer = document.getElementById('sw-crawl-container');
-            
             layer.style.display = 'block';
             setTimeout(() => { introText.style.opacity = 1; }, 500);
             setTimeout(() => {
                 introText.style.opacity = 0;
-                setTimeout(() => {
-                    crawlContainer.style.opacity = 1;
-                }, 1000);
+                setTimeout(() => { crawlContainer.style.opacity = 1; }, 1000);
             }, 4000); 
         }
 
-        window.endIntro = function() {
+        function endIntro() {
             const swLayer = document.getElementById('starwars-layer');
             const canvasContainer = document.getElementById('canvas-container');
             const uiLayer = document.getElementById('ui-layer');
             const controls = document.getElementById('controls');
             const preview = document.getElementById('video-preview');
             const btnTog = document.getElementById('btn-toggle-wb');
-
             swLayer.style.opacity = 0;
             setTimeout(() => {
                 swLayer.style.display = 'none';
-                if(!window.is3DInitialized) {
-                    window.is3DInitialized = true;
-                    init3DWorld(); 
-                }
+                if(!window.is3DInitialized) { window.is3DInitialized = true; init3DWorld(); }
                 canvasContainer.style.opacity = 1;
                 uiLayer.style.display = 'block';
                 controls.style.display = 'flex';
@@ -312,1053 +330,307 @@
             }, 1000);
         };
 
-        // --- Resource Management (Expert: Disposal System) ---
         function cleanUpGroup(group) {
             if (!group) return;
-            // Iterate backwards to safely remove while traversing
             for (let i = group.children.length - 1; i >= 0; i--) {
                 const child = group.children[i];
-                cleanUpGroup(child); // Recursive
-                
+                cleanUpGroup(child); 
                 if (child.geometry) child.geometry.dispose();
-                
                 if (child.material) {
-                    if (Array.isArray(child.material)) {
-                        child.material.forEach(mat => {
-                            if (mat.map) mat.map.dispose();
-                            if (mat.bumpMap) mat.bumpMap.dispose();
-                            mat.dispose();
-                        });
-                    } else {
-                        if (child.material.map) child.material.map.dispose();
-                        if (child.material.bumpMap) child.material.bumpMap.dispose();
-                        child.material.dispose();
-                    }
+                    if (Array.isArray(child.material)) { child.material.forEach(mat => mat.dispose()); } 
+                    else { child.material.dispose(); }
                 }
                 group.remove(child);
             }
         }
 
-        // --- Photo Handling ---
-        function handleImageUpload(event) {
-            const files = event.target.files;
+        // --- Photo Handling (Updated for 100 Photos) ---
+        async function handleImageUpload(event) {
+            const files = Array.from(event.target.files);
             if (!files.length) return;
             
-            // Clean up old photos properly
-            photoObjects.forEach(obj => {
-                 contentGroup.remove(obj);
-                 cleanUpGroup(obj);
-            });
-
+            const loaderOverlay = document.getElementById('loading-overlay');
+            const loaderText = document.getElementById('loading-text');
+            loaderOverlay.style.display = 'flex';
+            
+            photoObjects.forEach(obj => { contentGroup.remove(obj); cleanUpGroup(obj); });
             photoObjects = []; window.EMBEDDED_PHOTOS = [];
             
             const loader = new THREE.TextureLoader();
-            Array.from(files).forEach((file, index) => {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    const base64 = e.target.result;
-                    window.EMBEDDED_PHOTOS.push(base64);
-                    // 修改：使用回调函数确保图片加载完成，能获取到宽高
-                    loader.load(base64, (texture) => {
-                        createPhotoFrame(texture, index);
+            
+            for (let i = 0; i < files.length; i++) {
+                loaderText.innerText = `正在压缩处理照片... (${i+1}/${files.length})`;
+                const compressedBase64 = await compressImage(files[i]);
+                window.EMBEDDED_PHOTOS.push(compressedBase64);
+                
+                await new Promise(resolve => {
+                    loader.load(compressedBase64, (texture) => {
+                        createPhotoFrame(texture, i, files.length); 
+                        resolve();
                     });
-                };
-                reader.readAsDataURL(file);
-            });
+                });
+            }
+            
+            loaderOverlay.style.display = 'none';
         }
         
         function loadEmbeddedPhotos() {
             if (window.EMBEDDED_PHOTOS && window.EMBEDDED_PHOTOS.length > 0) {
                 const loader = new THREE.TextureLoader();
+                const total = window.EMBEDDED_PHOTOS.length;
                 window.EMBEDDED_PHOTOS.forEach((data, index) => {
-                    // 修改：使用回调函数
                     loader.load(data, (texture) => {
-                        createPhotoFrame(texture, index);
+                        createPhotoFrame(texture, index, total);
                     });
                 });
             }
         }
 
-        function createPhotoFrame(texture, index) {
-            // Adjust texture encoding for latest Three.js color management
+        function createPhotoFrame(texture, index, totalCount = 1) {
             texture.colorSpace = THREE.SRGBColorSpace;
-            
-            // --- 核心修改：自适应宽高比例 ---
             const img = texture.image;
-            let width = 8;
-            let height = 8;
-            const maxDim = 9; // 最大边长限制，防止长图过大
+            let width = 8; let height = 8; const maxDim = 9;
 
             if (img.width && img.height) {
                 const aspect = img.width / img.height;
-                if (aspect >= 1) {
-                    // 横图：宽度固定为 maxDim，高度自适应
-                    width = maxDim;
-                    height = maxDim / aspect;
-                } else {
-                    // 竖图：高度固定为 maxDim，宽度自适应
-                    height = maxDim;
-                    width = maxDim * aspect;
-                }
+                if (aspect >= 1) { width = maxDim; height = maxDim / aspect; } 
+                else { height = maxDim; width = maxDim * aspect; }
             }
 
-            // 使用计算出的 width 和 height 创建几何体
             const photoGeo = new THREE.PlaneGeometry(width, height);
-            const photoMat = new THREE.MeshBasicMaterial({ 
-                map: texture, 
-                side: THREE.DoubleSide, 
-                color: new THREE.Color().setScalar(CONFIG.photoBrightnessNormal) 
-            });
-            const photoMesh = new THREE.Mesh(photoGeo, photoMat); 
-            photoMesh.name = "photo_surface"; 
+            const photoMat = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide, color: new THREE.Color().setScalar(CONFIG.photoBrightnessNormal) });
+            const photoMesh = new THREE.Mesh(photoGeo, photoMat); photoMesh.name = "photo_surface"; 
             
-            const frameGroup = new THREE.Group(); 
-            frameGroup.add(photoMesh);
+            const frameGroup = new THREE.Group(); frameGroup.add(photoMesh);
             
-            // --- 材质修改：淡粉红色不反光毛绒材质 ---
-            const plushTex = getPlushTexture(); // 复用已有的毛绒纹理生成器
+            const plushTex = getPlushTexture(); 
+            const frameMat = new THREE.MeshPhysicalMaterial({ color: 0xFFB7C5, roughness: 1.0, metalness: 0.0, bumpMap: plushTex, bumpScale: 0.5, sheen: 1.0, sheenColor: 0xFFE4E1, sheenRoughness: 1.0, clearcoat: 0.0 });
             
-            const frameMat = new THREE.MeshPhysicalMaterial({ 
-                color: 0xFFB7C5,       // 淡粉红色 (Pale Pink)
-                roughness: 1.0,        // 粗糙度设为 1.0 (完全不反光/哑光)
-                metalness: 0.0,        // 非金属
-                bumpMap: plushTex,     // 添加凹凸纹理模拟毛绒表面
-                bumpScale: 0.5,        // 增加凹凸深度
-                sheen: 1.0,            // 开启光泽层 (模拟织物边缘的泛光)
-                sheenColor: 0xFFE4E1,  // 泛光颜色为更淡的粉白
-                sheenRoughness: 1.0,   // 泛光也很柔和
-                clearcoat: 0.0         // 关闭清漆层 (去除塑料感)
-            });
-            
-            const thickness = 0.5; const depth = 0.3; 
-            const w = width; 
-            const h = height;
-            
-            // 根据动态的 w 和 h 构建边框
+            const thickness = 0.5; const depth = 0.3; const w = width; const h = height;
             const topBar = new THREE.Mesh(new THREE.BoxGeometry(w+thickness*2, thickness, depth), frameMat); topBar.position.y = h/2+thickness/2;
             const bottomBar = new THREE.Mesh(new THREE.BoxGeometry(w+thickness*2, thickness, depth), frameMat); bottomBar.position.y = -h/2-thickness/2;
             const leftBar = new THREE.Mesh(new THREE.BoxGeometry(thickness, h, depth), frameMat); leftBar.position.x = -w/2-thickness/2;
             const rightBar = new THREE.Mesh(new THREE.BoxGeometry(thickness, h, depth), frameMat); rightBar.position.x = w/2+thickness/2;
             
-            [topBar, bottomBar, leftBar, rightBar].forEach(b => { 
-                b.name = "frame_border"; 
-                b.castShadow = true;
-                b.receiveShadow = true;
-                frameGroup.add(b); 
-            });
+            [topBar, bottomBar, leftBar, rightBar].forEach(b => { b.name = "frame_border"; b.castShadow = true; b.receiveShadow = true; frameGroup.add(b); });
             
-            const theta = Math.random()*Math.PI*2; 
-            const phi = Math.acos((Math.random()*2)-1); 
-            const r = CONFIG.planetRadius + 15; 
-            frameGroup.position.set(r*Math.sin(phi)*Math.cos(theta), r*Math.sin(phi)*Math.sin(theta), r*Math.cos(phi));
+            const phi = Math.acos(1 - 2 * (index + 0.5) / totalCount);
+            const theta = Math.PI * (1 + Math.sqrt(5)) * (index + 0.5);
+            
+            const baseRadius = 60; 
+            const radiusStep = totalCount > 50 ? 0.3 : 0; 
+            const r = baseRadius + (index % 3) * 5 + (totalCount * 0.1); 
+
+            frameGroup.position.x = r * Math.sin(phi) * Math.cos(theta);
+            frameGroup.position.y = r * Math.sin(phi) * Math.sin(theta);
+            frameGroup.position.z = r * Math.cos(phi);
+            
             frameGroup.lookAt(0,0,0);
             frameGroup.userData = { originalPos: frameGroup.position.clone(), originalRot: frameGroup.rotation.clone(), id: index, baseScale: 1.0 };
             
-            // Photo Visibility: Start Hidden if in Planet Mode
             if(currentState === STATE.PLANET) frameGroup.scale.set(0,0,0);
             
-            contentGroup.add(frameGroup); 
-            photoObjects.push(frameGroup);
+            contentGroup.add(frameGroup); photoObjects.push(frameGroup);
         }
 
-        // --- Texture Generation (Expert: Caching) ---
         function getPlushTexture() {
             if (cachedPlushTexture) return cachedPlushTexture;
-            
-            const size = 512; 
-            const canvas = document.createElement('canvas'); 
-            canvas.width = size; canvas.height = size;
-            const ctx = canvas.getContext('2d'); 
-            ctx.fillStyle = '#808080'; ctx.fillRect(0, 0, size, size);
-            
+            const size = 512; const canvas = document.createElement('canvas'); canvas.width = size; canvas.height = size;
+            const ctx = canvas.getContext('2d'); ctx.fillStyle = '#808080'; ctx.fillRect(0, 0, size, size);
             const imgData = ctx.getImageData(0, 0, size, size); const data = imgData.data;
-            for(let i = 0; i < data.length; i += 4) { 
-                const val = 128 + (Math.random() - 0.5) * 50; 
-                data[i] = val; data[i+1] = val; data[i+2] = val; 
-            }
+            for(let i = 0; i < data.length; i += 4) { const val = 128 + (Math.random() - 0.5) * 50; data[i] = val; data[i+1] = val; data[i+2] = val; }
             ctx.putImageData(imgData, 0, 0); 
-            
-            cachedPlushTexture = new THREE.CanvasTexture(canvas); 
-            cachedPlushTexture.wrapS = THREE.RepeatWrapping; 
-            cachedPlushTexture.wrapT = THREE.RepeatWrapping; 
-            return cachedPlushTexture;
+            cachedPlushTexture = new THREE.CanvasTexture(canvas); cachedPlushTexture.wrapS = THREE.RepeatWrapping; cachedPlushTexture.wrapT = THREE.RepeatWrapping; return cachedPlushTexture;
         }
 
-        // --- 3D Object Creation ---
         function createKittenCore() {
-            cleanUpGroup(coreGroup); 
-            if(coreGroup) contentGroup.remove(coreGroup);
-            coreGroup = new THREE.Group();
-            
-            const r = CONFIG.planetRadius * 0.5; 
-            const plushTex = getPlushTexture();
-
-            // EXPERT TWEAK: Use Physical Material for Sheen (Velvet Effect)
-            const matPink = new THREE.MeshPhysicalMaterial({ 
-                color: 0xFFB7C5, 
-                roughness: 0.8, 
-                bumpMap: plushTex, 
-                bumpScale: 0.2, 
-                emissive: 0xFF69B4, 
-                emissiveIntensity: CONFIG.kittenBrightness * CONFIG.masterBrightness, // Apply Master
-                sheen: 1.0, 
-                sheenColor: 0xFFFFFF,
-                sheenRoughness: 0.5
-            });
-
-            const matDarkPink = new THREE.MeshStandardMaterial({ color: 0xFF1493 }); 
-            const matBlack = new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.1 }); 
-            const matWhite = new THREE.MeshBasicMaterial({ color: 0xFFFFFF });
-
-            const head = new THREE.Mesh(new THREE.SphereGeometry(r, 64, 64), matPink); 
-            head.castShadow = true; head.receiveShadow = true;
-            coreGroup.add(head);
-
-            const earGeo = new THREE.ConeGeometry(r*0.35, r*0.5, 32); 
-            const e1 = new THREE.Mesh(earGeo, matPink); e1.position.set(-r*0.5, r*0.75, 0); e1.rotation.z = 0.4; e1.rotation.x = -0.1; e1.castShadow = true;
-            const e2 = new THREE.Mesh(earGeo, matPink); e2.position.set(r*0.5, r*0.75, 0); e2.rotation.z = -0.4; e2.rotation.x = -0.1; e2.castShadow = true;
-            coreGroup.add(e1); coreGroup.add(e2);
-
-            const eyeGeo = new THREE.SphereGeometry(r*0.18, 32, 32); 
-            const eyeL = new THREE.Mesh(eyeGeo, matBlack); eyeL.position.set(-r*0.4, r*0.1, r*0.82); 
-            const spL = new THREE.Mesh(new THREE.SphereGeometry(r*0.06), matWhite); spL.position.set(r*0.08, r*0.08, r*0.15); eyeL.add(spL); coreGroup.add(eyeL);
-            const eyeR = new THREE.Mesh(eyeGeo, matBlack); eyeR.position.set(r*0.4, r*0.1, r*0.82); 
-            const spR = new THREE.Mesh(new THREE.SphereGeometry(r*0.06), matWhite); spR.position.set(r*0.08, r*0.08, r*0.15); eyeR.add(spR); coreGroup.add(eyeR);
-
-            const cheekGeo = new THREE.SphereGeometry(r*0.15); 
-            const matBlush = new THREE.MeshBasicMaterial({ color: 0xFF69B4, transparent: true, opacity: 0.6 }); 
-            const cheekL = new THREE.Mesh(cheekGeo, matBlush); cheekL.position.set(-r*0.55, -r*0.15, r*0.75); coreGroup.add(cheekL); 
-            const cheekR = new THREE.Mesh(cheekGeo, matBlush); cheekR.position.set(r*0.55, -r*0.15, r*0.75); coreGroup.add(cheekR);
-            
-            // --- NEW: Whiskers (猫胡子) ---
-            const whiskerMat = new THREE.MeshBasicMaterial({ color: 0xFFFFFF, transparent: true, opacity: 0.8 });
-            const whiskerGeo = new THREE.CylinderGeometry(0.1, 0.05, r*0.8, 8);
-            whiskerGeo.translate(0, r*0.4, 0); // Move pivot to one end
-            whiskerGeo.rotateZ(Math.PI/2);     // Orient horizontally
-            
-            const createWhiskerSide = (isLeft) => {
-                const group = new THREE.Group();
-                const sign = isLeft ? 1 : -1;
-                // Position group near the cheek
-                group.position.set(sign * r * 0.6, -r * 0.05, r * 0.7);
-                // Rotate slightly to face forward/out
-                group.rotation.y = sign * 0.3;
-                
-                for(let i=-1; i<=1; i++) {
-                    const w = new THREE.Mesh(whiskerGeo, whiskerMat);
-                    // Fan them out
-                    w.rotation.z = i * 0.2 + (isLeft ? 0 : Math.PI); 
-                    w.rotation.y = (Math.random()-0.5) * 0.2;
-                    group.add(w);
-                }
-                return group;
-            };
-            
-            coreGroup.add(createWhiskerSide(true));  // Left whiskers
-            coreGroup.add(createWhiskerSide(false)); // Right whiskers
-
-            const nose = new THREE.Mesh(new THREE.CapsuleGeometry(r*0.06, r*0.1, 4, 8), matDarkPink); 
-            nose.rotation.z = Math.PI/2; nose.position.set(0, -r*0.05, r*0.95); coreGroup.add(nose);
-            
+            cleanUpGroup(coreGroup); if(coreGroup) contentGroup.remove(coreGroup); coreGroup = new THREE.Group();
+            const r = CONFIG.planetRadius * 0.5; const plushTex = getPlushTexture();
+            const matPink = new THREE.MeshPhysicalMaterial({ color: 0xFFB7C5, roughness: 0.8, bumpMap: plushTex, bumpScale: 0.2, emissive: 0xFF69B4, emissiveIntensity: CONFIG.kittenBrightness * CONFIG.masterBrightness, sheen: 1.0, sheenColor: 0xFFFFFF, sheenRoughness: 0.5 });
+            const matDarkPink = new THREE.MeshStandardMaterial({ color: 0xFF1493 }); const matBlack = new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 0.1 }); const matWhite = new THREE.MeshBasicMaterial({ color: 0xFFFFFF });
+            const head = new THREE.Mesh(new THREE.SphereGeometry(r, 64, 64), matPink); head.castShadow = true; head.receiveShadow = true; coreGroup.add(head);
+            const earGeo = new THREE.ConeGeometry(r*0.35, r*0.5, 32); const e1 = new THREE.Mesh(earGeo, matPink); e1.position.set(-r*0.5, r*0.75, 0); e1.rotation.z = 0.4; e1.rotation.x = -0.1; e1.castShadow = true; const e2 = new THREE.Mesh(earGeo, matPink); e2.position.set(r*0.5, r*0.75, 0); e2.rotation.z = -0.4; e2.rotation.x = -0.1; e2.castShadow = true; coreGroup.add(e1); coreGroup.add(e2);
+            const eyeGeo = new THREE.SphereGeometry(r*0.18, 32, 32); const eyeL = new THREE.Mesh(eyeGeo, matBlack); eyeL.position.set(-r*0.4, r*0.1, r*0.82); const spL = new THREE.Mesh(new THREE.SphereGeometry(r*0.06), matWhite); spL.position.set(r*0.08, r*0.08, r*0.15); eyeL.add(spL); coreGroup.add(eyeL); const eyeR = new THREE.Mesh(eyeGeo, matBlack); eyeR.position.set(r*0.4, r*0.1, r*0.82); const spR = new THREE.Mesh(new THREE.SphereGeometry(r*0.06), matWhite); spR.position.set(r*0.08, r*0.08, r*0.15); eyeR.add(spR); coreGroup.add(eyeR);
+            const cheekGeo = new THREE.SphereGeometry(r*0.15); const matBlush = new THREE.MeshBasicMaterial({ color: 0xFF69B4, transparent: true, opacity: 0.6 }); const cheekL = new THREE.Mesh(cheekGeo, matBlush); cheekL.position.set(-r*0.55, -r*0.15, r*0.75); coreGroup.add(cheekL); const cheekR = new THREE.Mesh(cheekGeo, matBlush); cheekR.position.set(r*0.55, -r*0.15, r*0.75); coreGroup.add(cheekR);
+            const whiskerMat = new THREE.MeshBasicMaterial({ color: 0xFFFFFF, transparent: true, opacity: 0.8 }); const whiskerGeo = new THREE.CylinderGeometry(0.1, 0.05, r*0.8, 8); whiskerGeo.translate(0, r*0.4, 0); whiskerGeo.rotateZ(Math.PI/2);
+            const createWhiskerSide = (isLeft) => { const group = new THREE.Group(); const sign = isLeft ? 1 : -1; group.position.set(sign * r * 0.6, -r * 0.05, r * 0.7); group.rotation.y = sign * 0.3; for(let i=-1; i<=1; i++) { const w = new THREE.Mesh(whiskerGeo, whiskerMat); w.rotation.z = i * 0.2 + (isLeft ? 0 : Math.PI); w.rotation.y = (Math.random()-0.5) * 0.2; group.add(w); } return group; }; coreGroup.add(createWhiskerSide(true)); coreGroup.add(createWhiskerSide(false));
+            const nose = new THREE.Mesh(new THREE.CapsuleGeometry(r*0.06, r*0.1, 4, 8), matDarkPink); nose.rotation.z = Math.PI/2; nose.position.set(0, -r*0.05, r*0.95); coreGroup.add(nose);
             contentGroup.add(coreGroup);
         }
 
         function createPlanetParticles() {
-            // Dispose old meshes properly
-            particleMeshes.forEach(m => { contentGroup.remove(m); if(m.geometry) m.geometry.dispose(); if(m.material) m.material.dispose(); });
-            particleMeshes = []; planetPositions = []; explodePositions = [];
-            
+            particleMeshes.forEach(m => { contentGroup.remove(m); if(m.geometry) m.geometry.dispose(); if(m.material) m.material.dispose(); }); particleMeshes = []; planetPositions = []; explodePositions = [];
             const plushTex = getPlushTexture();
-            
-            // EXPERT TWEAK: Physical Material for Particles
-            const matSphere = new THREE.MeshPhysicalMaterial({ 
-                color: 0xFFFFFF, 
-                roughness: 0.9, 
-                bumpMap: plushTex, 
-                bumpScale: 0.2, 
-                emissive: 0xFF69B4, 
-                emissiveIntensity: CONFIG.plushBrightness * CONFIG.masterBrightness, // Apply Master
-                sheen: 1.0,
-                sheenColor: 0xFFC0CB
-            });
-            
-            const matBox = new THREE.MeshStandardMaterial({ 
-                color: 0xFFFFFF, roughness: 0.4, metalness: 0.3, emissive: 0x442244, emissiveIntensity: 0.2 
-            });
-            
-            const sphereGeo = new THREE.IcosahedronGeometry(0.9, 1); // Reduced resolution slightly for performance
-            const boxGeo = new THREE.BoxGeometry(1.3, 1.3, 1.3);      
-            
-            const sphereCount = Math.floor(CONFIG.particleCount * 0.7); 
-            const boxCount = CONFIG.particleCount - sphereCount;
-            
-            const meshSphere = new THREE.InstancedMesh(sphereGeo, matSphere, sphereCount); 
-            meshSphere.castShadow = true; meshSphere.receiveShadow = true;
-            
-            const meshBox = new THREE.InstancedMesh(boxGeo, matBox, boxCount);
-            meshBox.castShadow = true; meshBox.receiveShadow = true;
-
-            meshSphere.userData = { type: 'sphere' }; meshBox.userData = { type: 'box' };
-            const meshes = [meshSphere, meshBox]; const counts = [sphereCount, boxCount]; const color = new THREE.Color();
-            
-            const phi = Math.PI * (3 - Math.sqrt(5)); const total = CONFIG.particleCount;
-            let allPos = [];
-            
-            // Fibonacci Sphere Distribution
-            for(let i=0; i<total; i++) { 
-                const y = 1 - (i / (total - 1)) * 2; 
-                const radiusAtY = Math.sqrt(1 - y * y); 
-                const theta = phi * i; 
-                const x = Math.cos(theta) * radiusAtY; 
-                const z = Math.sin(theta) * radiusAtY; 
-                const r = CONFIG.planetRadius + (Math.random() - 0.5) * 2.0; 
-                allPos.push(new THREE.Vector3(x*r, y*r, z*r)); 
-            }
-            
-            // Shuffle
-            const indices = Array.from({length: total}, (_, i) => i); 
-            for(let i=indices.length-1; i>0; i--) { const j = Math.floor(Math.random() * (i+1)); [indices[i], indices[j]] = [indices[j], indices[i]]; }
-            
+            const matSphere = new THREE.MeshPhysicalMaterial({ color: 0xFFFFFF, roughness: 0.9, bumpMap: plushTex, bumpScale: 0.2, emissive: 0xFF69B4, emissiveIntensity: CONFIG.plushBrightness * CONFIG.masterBrightness, sheen: 1.0, sheenColor: 0xFFC0CB });
+            const matBox = new THREE.MeshStandardMaterial({ color: 0xFFFFFF, roughness: 0.4, metalness: 0.3, emissive: 0x442244, emissiveIntensity: 0.2 });
+            const sphereGeo = new THREE.IcosahedronGeometry(0.9, 1); const boxGeo = new THREE.BoxGeometry(1.3, 1.3, 1.3);      
+            const sphereCount = Math.floor(CONFIG.particleCount * 0.7); const boxCount = CONFIG.particleCount - sphereCount;
+            const meshSphere = new THREE.InstancedMesh(sphereGeo, matSphere, sphereCount); meshSphere.castShadow = true; meshSphere.receiveShadow = true;
+            const meshBox = new THREE.InstancedMesh(boxGeo, matBox, boxCount); meshBox.castShadow = true; meshBox.receiveShadow = true;
+            meshSphere.userData = { type: 'sphere' }; meshBox.userData = { type: 'box' }; const meshes = [meshSphere, meshBox]; const counts = [sphereCount, boxCount]; const color = new THREE.Color();
+            const phi = Math.PI * (3 - Math.sqrt(5)); const total = CONFIG.particleCount; let allPos = [];
+            for(let i=0; i<total; i++) { const y = 1 - (i / (total - 1)) * 2; const radiusAtY = Math.sqrt(1 - y * y); const theta = phi * i; const x = Math.cos(theta) * radiusAtY; const z = Math.sin(theta) * radiusAtY; const r = CONFIG.planetRadius + (Math.random() - 0.5) * 2.0; allPos.push(new THREE.Vector3(x*r, y*r, z*r)); }
+            const indices = Array.from({length: total}, (_, i) => i); for(let i=indices.length-1; i>0; i--) { const j = Math.floor(Math.random() * (i+1)); [indices[i], indices[j]] = [indices[j], indices[i]]; }
             let offset = 0;
-            meshes.forEach((mesh, idx) => {
-                const count = counts[idx];
-                for(let i=0; i<count; i++) {
-                    const pIdx = indices[offset + i]; 
-                    const pos = allPos[pIdx]; 
-                    planetPositions.push(pos);
-                    const rExp = 50 + Math.random() * 50; 
-                    explodePositions.push(pos.clone().normalize().multiplyScalar(rExp));
-                    
-                    dummy.position.copy(pos); 
-                    dummy.scale.setScalar(Math.random()*0.5 + 0.5); 
-                    dummy.rotation.set(Math.random()*Math.PI, Math.random()*Math.PI, Math.random()*Math.PI);
-                    dummy.updateMatrix(); 
-                    mesh.setMatrixAt(i, dummy.matrix);
-                    
-                    const hex = CONFIG.colors[Math.floor(Math.random() * CONFIG.colors.length)]; 
-                    color.setHex(hex); 
-                    mesh.setColorAt(i, color);
-                }
-                offset += count; 
-                contentGroup.add(mesh); 
-                particleMeshes.push(mesh);
-            });
+            meshes.forEach((mesh, idx) => { const count = counts[idx]; for(let i=0; i<count; i++) { const pIdx = indices[offset + i]; const pos = allPos[pIdx]; planetPositions.push(pos); const rExp = 50 + Math.random() * 50; explodePositions.push(pos.clone().normalize().multiplyScalar(rExp)); dummy.position.copy(pos); dummy.scale.setScalar(Math.random()*0.5 + 0.5); dummy.rotation.set(Math.random()*Math.PI, Math.random()*Math.PI, Math.random()*Math.PI); dummy.updateMatrix(); mesh.setMatrixAt(i, dummy.matrix); const hex = CONFIG.colors[Math.floor(Math.random() * CONFIG.colors.length)]; color.setHex(hex); mesh.setColorAt(i, color); } offset += count; contentGroup.add(mesh); particleMeshes.push(mesh); });
         }
 
         function createOrbitParticles() {
-            cleanUpGroup(orbitGroup);
-            orbitMeshes = [];
-            
-            const geo = new THREE.BoxGeometry(0.8, 0.8, 0.8);
-            const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8 * CONFIG.rainbowIntensity * 0.5 * CONFIG.masterBrightness, blending: THREE.AdditiveBlending });
-            const rainbowMesh = new THREE.InstancedMesh(geo, mat, CONFIG.rainbowCount);
-            
-            const colors = [0xFF0000, 0xFFA500, 0xFFFF00, 0x00FF00, 0x00FFFF, 0x0000FF, 0x8B00FF]; 
-            const col = new THREE.Color();
-            
-            for(let i=0; i<CONFIG.rainbowCount; i++) {
-                const t = i / CONFIG.rainbowCount; const angle = t * Math.PI * 2;
-                const r = CONFIG.orbitRadius + (Math.random()-0.5) * 6; 
-                const x = Math.cos(angle) * r; const z = Math.sin(angle) * r; 
-                const y = Math.sin(angle * 3) * 5 + (Math.random()-0.5)*2; 
-                
-                dummy.position.set(x, y, z); 
-                dummy.scale.setScalar(Math.random() * 1.5 + 0.5); 
-                dummy.rotation.set(Math.random(), Math.random(), Math.random()); 
-                dummy.updateMatrix();
-                rainbowMesh.setMatrixAt(i, dummy.matrix);
-                
-                const cIdx = Math.floor(t * colors.length); 
-                col.setHex(colors[cIdx]); col.lerp(new THREE.Color(0xFFFFFF), 0.3); 
-                rainbowMesh.setColorAt(i, col);
-            }
-            orbitGroup.add(rainbowMesh); orbitMeshes.push(rainbowMesh);
-            
-            const cloudMat = new THREE.MeshStandardMaterial({ 
-                color: 0xFFFFFF, roughness: 1, flatShading: false, transparent: true, opacity: 0.8, 
-                emissive: 0xFFFFFF, emissiveIntensity: CONFIG.cloudBrightness * CONFIG.masterBrightness 
-            });
-            const cloudGeo = new THREE.SphereGeometry(2.5, 8, 8); 
-            const cloudsTotal = CONFIG.cloudCount * 5; 
-            const cloudMesh = new THREE.InstancedMesh(cloudGeo, cloudMat, cloudsTotal);
-            
-            let idx = 0;
-            for(let i=0; i<CONFIG.cloudCount; i++) {
-                const angle = Math.random() * Math.PI * 2; const rCenter = CONFIG.cloudOrbitRadius; 
-                if(Math.random() > 0.4) continue; 
-                const centerX = Math.cos(angle) * rCenter; const centerZ = Math.sin(angle) * rCenter; const centerY = (Math.random()-0.5) * 9; 
-                const blobs = 4 + Math.floor(Math.random() * 4);
-                
-                for(let j=0; j<blobs; j++) {
-                    if(idx >= cloudsTotal) break;
-                    const offX = (Math.random()-0.5)*6; const offY = (Math.random()-0.5)*1.8; const offZ = (Math.random()-0.5)*6;
-                    dummy.position.set(centerX + offX, centerY + offY, centerZ + offZ); 
-                    dummy.scale.setScalar(Math.random() * 1.5 + 0.8);
-                    dummy.rotation.set(Math.random(), Math.random(), 0); 
-                    dummy.updateMatrix(); 
-                    cloudMesh.setMatrixAt(idx, dummy.matrix); 
-                    cloudMesh.setColorAt(idx, new THREE.Color(0xFFFFFF)); 
-                    idx++;
-                }
-            }
-            orbitGroup.add(cloudMesh); orbitMeshes.push(cloudMesh);
+            cleanUpGroup(orbitGroup); orbitMeshes = [];
+            const geo = new THREE.BoxGeometry(0.8, 0.8, 0.8); const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8 * CONFIG.rainbowIntensity * 0.5 * CONFIG.masterBrightness, blending: THREE.AdditiveBlending });
+            const rainbowMesh = new THREE.InstancedMesh(geo, mat, CONFIG.rainbowCount); const colors = [0xFF0000, 0xFFA500, 0xFFFF00, 0x00FF00, 0x00FFFF, 0x0000FF, 0x8B00FF]; const col = new THREE.Color();
+            for(let i=0; i<CONFIG.rainbowCount; i++) { const t = i / CONFIG.rainbowCount; const angle = t * Math.PI * 2; const r = CONFIG.orbitRadius + (Math.random()-0.5) * 6; const x = Math.cos(angle) * r; const z = Math.sin(angle) * r; const y = Math.sin(angle * 3) * 5 + (Math.random()-0.5)*2; dummy.position.set(x, y, z); dummy.scale.setScalar(Math.random() * 1.5 + 0.5); dummy.rotation.set(Math.random(), Math.random(), Math.random()); dummy.updateMatrix(); rainbowMesh.setMatrixAt(i, dummy.matrix); const cIdx = Math.floor(t * colors.length); col.setHex(colors[cIdx]); col.lerp(new THREE.Color(0xFFFFFF), 0.3); rainbowMesh.setColorAt(i, col); } orbitGroup.add(rainbowMesh); orbitMeshes.push(rainbowMesh);
+            const cloudMat = new THREE.MeshStandardMaterial({ color: 0xFFFFFF, roughness: 1, flatShading: false, transparent: true, opacity: 0.8, emissive: 0xFFFFFF, emissiveIntensity: CONFIG.cloudBrightness * CONFIG.masterBrightness }); const cloudGeo = new THREE.SphereGeometry(2.5, 8, 8); const cloudsTotal = CONFIG.cloudCount * 5; const cloudMesh = new THREE.InstancedMesh(cloudGeo, cloudMat, cloudsTotal);
+            let idx = 0; for(let i=0; i<CONFIG.cloudCount; i++) { const angle = Math.random() * Math.PI * 2; const rCenter = CONFIG.cloudOrbitRadius; if(Math.random() > 0.4) continue; const centerX = Math.cos(angle) * rCenter; const centerZ = Math.sin(angle) * rCenter; const centerY = (Math.random()-0.5) * 9; const blobs = 4 + Math.floor(Math.random() * 4); for(let j=0; j<blobs; j++) { if(idx >= cloudsTotal) break; const offX = (Math.random()-0.5)*6; const offY = (Math.random()-0.5)*1.8; const offZ = (Math.random()-0.5)*6; dummy.position.set(centerX + offX, centerY + offY, centerZ + offZ); dummy.scale.setScalar(Math.random() * 1.5 + 0.8); dummy.rotation.set(Math.random(), Math.random(), 0); dummy.updateMatrix(); cloudMesh.setMatrixAt(idx, dummy.matrix); cloudMesh.setColorAt(idx, new THREE.Color(0xFFFFFF)); idx++; } } orbitGroup.add(cloudMesh); orbitMeshes.push(cloudMesh);
         }
 
         function createPiggySatellite() {
-            if(satelliteGroup) orbitGroup.remove(satelliteGroup); 
-            // Satellite is usually kept simple, so we just remove from parent, cleaner can handle next refresh
-            satelliteGroup = new THREE.Group();
-            
-            const size = 3.5;
-            const matPink = new THREE.MeshPhysicalMaterial({ 
-                color: 0xFFB7C5, roughness: 0.6, metalness: 0.1, 
-                emissive: 0xFFC0CB, emissiveIntensity: 0.2 * CONFIG.masterBrightness,
-                clearcoat: 0.5
-            });
-            const matDark = new THREE.MeshStandardMaterial({ color: 0xFF69B4 }); 
-            const matBlack = new THREE.MeshBasicMaterial({ color: 0x000000 });
-            
+            if(satelliteGroup) orbitGroup.remove(satelliteGroup); satelliteGroup = new THREE.Group();
+            const size = 3.5; const matPink = new THREE.MeshPhysicalMaterial({ color: 0xFFB7C5, roughness: 0.6, metalness: 0.1, emissive: 0xFFC0CB, emissiveIntensity: 0.2 * CONFIG.masterBrightness, clearcoat: 0.5 }); const matDark = new THREE.MeshStandardMaterial({ color: 0xFF69B4 }); const matBlack = new THREE.MeshBasicMaterial({ color: 0x000000 });
             const body = new THREE.Mesh(new THREE.SphereGeometry(size, 32, 32), matPink); body.castShadow = true; satelliteGroup.add(body);
-            const earGeo = new THREE.ConeGeometry(size*0.4, size*0.8, 16);
-            const e1 = new THREE.Mesh(earGeo, matPink); e1.position.set(-size*0.6, size*0.7, 0); e1.rotation.z = 0.5; body.add(e1);
-            const e2 = new THREE.Mesh(earGeo, matPink); e2.position.set(size*0.6, size*0.7, 0); e2.rotation.z = -0.5; body.add(e2);
-            
-            const snout = new THREE.Mesh(new THREE.CylinderGeometry(size*0.3, size*0.35, size*0.2, 16), matDark); 
-            snout.rotation.x = Math.PI/2; snout.position.set(0, 0, size*0.9); body.add(snout);
-            
-            const eye1 = new THREE.Mesh(new THREE.SphereGeometry(size*0.12), matBlack); eye1.position.set(-size*0.4, size*0.2, size*0.85); body.add(eye1);
-            const eye2 = new THREE.Mesh(new THREE.SphereGeometry(size*0.12), matBlack); eye2.position.set(size*0.4, size*0.2, size*0.85); body.add(eye2);
-            
-            satelliteGroup.scale.setScalar(CONFIG.piggyScale); 
-            orbitGroup.add(satelliteGroup);
+            const earGeo = new THREE.ConeGeometry(size*0.4, size*0.8, 16); const e1 = new THREE.Mesh(earGeo, matPink); e1.position.set(-size*0.6, size*0.7, 0); e1.rotation.z = 0.5; body.add(e1); const e2 = new THREE.Mesh(earGeo, matPink); e2.position.set(size*0.6, size*0.7, 0); e2.rotation.z = -0.5; body.add(e2);
+            const snout = new THREE.Mesh(new THREE.CylinderGeometry(size*0.3, size*0.35, size*0.2, 16), matDark); snout.rotation.x = Math.PI/2; snout.position.set(0, 0, size*0.9); body.add(snout);
+            const eye1 = new THREE.Mesh(new THREE.SphereGeometry(size*0.12), matBlack); eye1.position.set(-size*0.4, size*0.2, size*0.85); body.add(eye1); const eye2 = new THREE.Mesh(new THREE.SphereGeometry(size*0.12), matBlack); eye2.position.set(size*0.4, size*0.2, size*0.85); body.add(eye2);
+            satelliteGroup.scale.setScalar(CONFIG.piggyScale); orbitGroup.add(satelliteGroup);
         }
 
         function createStarField() {
-            const starGeo = new THREE.BufferGeometry(); const starPos = [];
-            for(let i=0; i<CONFIG.starCount; i++) {
-                const r = 400 + Math.random() * 400; const theta = Math.random() * Math.PI * 2; const phi = Math.acos(2 * Math.random() - 1);
-                starPos.push(r * Math.sin(phi) * Math.cos(theta), r * Math.sin(phi) * Math.sin(theta), r * Math.cos(phi));
-            }
-            starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starPos, 3));
-            const starMat = new THREE.PointsMaterial({ color: 0xFFFFFF, size: 1.5, transparent: true, opacity: 0.8, sizeAttenuation: true });
-            const stars = new THREE.Points(starGeo, starMat); 
-            starGroup.add(stars);
+            const starGeo = new THREE.BufferGeometry(); const starPos = []; for(let i=0; i<CONFIG.starCount; i++) { const r = 400 + Math.random() * 400; const theta = Math.random() * Math.PI * 2; const phi = Math.acos(2 * Math.random() - 1); starPos.push(r * Math.sin(phi) * Math.cos(theta), r * Math.sin(phi) * Math.sin(theta), r * Math.cos(phi)); } starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starPos, 3));
+            const starMat = new THREE.PointsMaterial({ color: 0xFFFFFF, size: 1.5, transparent: true, opacity: 0.8, sizeAttenuation: true }); const stars = new THREE.Points(starGeo, starMat); starGroup.add(stars);
         }
 
         function createCursor() {
-            const shape = new THREE.Shape(); const x = 0, y = 0;
-            shape.moveTo(x + 0.25, y + 0.25); shape.bezierCurveTo(x + 0.25, y + 0.25, x + 0.20, y, x, y);
-            shape.bezierCurveTo(x - 0.30, y, x - 0.30, y + 0.35, x - 0.30, y + 0.35); shape.bezierCurveTo(x - 0.30, y + 0.55, x - 0.10, y + 0.77, x + 0.25, y + 0.95);
-            shape.bezierCurveTo(x + 0.60, y + 0.77, x + 0.80, y + 0.55, x + 0.80, y + 0.35); shape.bezierCurveTo(x + 0.80, y + 0.35, x + 0.80, y, x + 0.50, y);
-            shape.bezierCurveTo(x + 0.35, y, x + 0.25, y + 0.25, x + 0.25, y + 0.25);
-            
-            const geometry = new THREE.ShapeGeometry(shape); geometry.center(); geometry.scale(1.5, 1.5, 1.5); 
-            const material = new THREE.MeshBasicMaterial({ color: 0xFF69B4, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthTest: false });
+            const shape = new THREE.Shape(); const x = 0, y = 0; shape.moveTo(x + 0.25, y + 0.25); shape.bezierCurveTo(x + 0.25, y + 0.25, x + 0.20, y, x, y); shape.bezierCurveTo(x - 0.30, y, x - 0.30, y + 0.35, x - 0.30, y + 0.35); shape.bezierCurveTo(x - 0.30, y + 0.55, x - 0.10, y + 0.77, x + 0.25, y + 0.95); shape.bezierCurveTo(x + 0.60, y + 0.77, x + 0.80, y + 0.55, x + 0.80, y + 0.35); shape.bezierCurveTo(x + 0.80, y + 0.35, x + 0.80, y, x + 0.50, y); shape.bezierCurveTo(x + 0.35, y, x + 0.25, y + 0.25, x + 0.25, y + 0.25);
+            const geometry = new THREE.ShapeGeometry(shape); geometry.center(); geometry.scale(1.5, 1.5, 1.5); const material = new THREE.MeshBasicMaterial({ color: 0xFF69B4, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthTest: false });
             cursorMesh = new THREE.Mesh(geometry, material); cursorMesh.renderOrder = 999; scene.add(cursorMesh); 
         }
 
-        // --- Helper: Dynamic Script Loading ---
-        // EXPERT TWEAK: Removed crossOrigin="anonymous" to prevent CORS issues on some CDNs
-        function loadScript(src) {
-            return new Promise((resolve, reject) => {
-                if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
-                const s = document.createElement('script');
-                s.src = src; 
-                // Removed s.crossOrigin = "anonymous"; here
-                s.onload = resolve; 
-                s.onerror = () => reject(new Error(`Failed to load script: ${src}`)); 
-                document.body.appendChild(s);
-            });
-        }
+        function loadScript(src) { return new Promise((resolve, reject) => { if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; } const s = document.createElement('script'); s.src = src; s.onload = resolve; s.onerror = () => reject(new Error(`Failed to load script: ${src}`)); document.body.appendChild(s); }); }
 
-        // --- MediaPipe Implementation ---
         async function initMediaPipe() {
-            // 安全检查：如果浏览器不支持媒体设备（例如在非安全上下文中），直接报错
-            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-                alert("错误：当前浏览器环境不支持访问摄像头。\n请确保您使用的是 HTTPS 协议或 localhost 本地环境。\n(file:/// 协议无法访问摄像头)");
-                return;
-            }
-
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { alert("错误：当前浏览器环境不支持访问摄像头。\n请确保您使用的是 HTTPS 协议或 localhost 本地环境。\n(file:/// 协议无法访问摄像头)"); return; }
             if(window.mediaPipeInitializing) return;
-            
-            // Toggle Logic if already active
-            if(isCamActive && cameraPipe) {
-                // Stop camera
-                await cameraPipe.stop();
-                const track = document.getElementById('video-preview').srcObject?.getTracks()[0];
-                if(track) track.stop();
-                isCamActive = false;
-                document.getElementById('btn-start-cam').innerText = "📷 启动摄像头";
-                document.getElementById('btn-start-cam').classList.remove('active');
-                document.getElementById('gesture-state').innerText = "Stopped";
-                return;
-            }
-
-            window.mediaPipeInitializing = true;
-            const btn = document.getElementById('btn-start-cam');
-            if(btn) btn.innerText = "启动中...";
-            
+            if(isCamActive && cameraPipe) { await cameraPipe.stop(); const track = document.getElementById('video-preview').srcObject?.getTracks()[0]; if(track) track.stop(); isCamActive = false; document.getElementById('btn-start-cam').innerText = "📷 启动摄像头"; document.getElementById('btn-start-cam').classList.remove('active'); document.getElementById('gesture-state').innerText = "Stopped"; return; }
+            window.mediaPipeInitializing = true; const btn = document.getElementById('btn-start-cam'); if(btn) btn.innerText = "启动中...";
             const preview = document.getElementById('video-preview');
-            
-            // CDN Fallback Logic (Expert Update: Added Latest fallback)
-            const HANDS_VERSION = '0.4.1673521017';
-            const CAMERA_VERSION = '0.3.1675466862';
-            
-            // List of sources in order of preference
-            const handsSources = [
-                `https://cdn.jsdelivr.net/npm/@mediapipe/hands@${HANDS_VERSION}/hands.js`,
-                `https://unpkg.com/@mediapipe/hands@${HANDS_VERSION}/hands.js`,
-                `https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js` // Fallback to latest
-            ];
-
-            const cameraSources = [
-                `https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@${CAMERA_VERSION}/camera_utils.js`,
-                `https://unpkg.com/@mediapipe/camera_utils@${CAMERA_VERSION}/camera_utils.js`,
-                `https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js` // Fallback to latest
-            ];
-
-            // Helper to try loading from a list of URLs
-            const loadFromSources = async (sources) => {
-                for (const src of sources) {
-                    try {
-                        await loadScript(src);
-                        console.log(`Successfully loaded: ${src}`);
-                        return src; // Return the working URL to determine base path
-                    } catch (e) {
-                        console.warn(`Failed to load ${src}, trying next...`);
-                        continue;
-                    }
-                }
-                throw new Error("All CDN sources failed.");
-            };
-
+            const HANDS_VERSION = '0.4.1673521017'; const CAMERA_VERSION = '0.3.1675466862';
+            const handsSources = [`https://cdn.jsdelivr.net/npm/@mediapipe/hands@${HANDS_VERSION}/hands.js`, `https://unpkg.com/@mediapipe/hands@${HANDS_VERSION}/hands.js`, `https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js`];
+            const cameraSources = [`https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@${CAMERA_VERSION}/camera_utils.js`, `https://unpkg.com/@mediapipe/camera_utils@${CAMERA_VERSION}/camera_utils.js`, `https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js`];
+            const loadFromSources = async (sources) => { for (const src of sources) { try { await loadScript(src); return src; } catch (e) { console.warn(`Failed to load ${src}, trying next...`); continue; } } throw new Error("All CDN sources failed."); };
             try {
-                console.log("Loading MediaPipe scripts...");
-                
-                // Load Hands
-                const handsLoadedUrl = await loadFromSources(handsSources);
-                // Determine base URL for assets based on which script loaded
-                const handsBase = handsLoadedUrl.substring(0, handsLoadedUrl.lastIndexOf('/'));
-
-                // Load Camera Utils
+                const handsLoadedUrl = await loadFromSources(handsSources); const handsBase = handsLoadedUrl.substring(0, handsLoadedUrl.lastIndexOf('/'));
                 await loadFromSources(cameraSources);
-                
-                console.log("Initializing Hands...");
-                if(!window.Hands) throw new Error("Hands library not found after script load");
-
-                hands = new window.Hands({locateFile: (file) => {
-                    return `${handsBase}/${file}`;
-                }});
-                
+                hands = new window.Hands({locateFile: (file) => { return `${handsBase}/${file}`; }});
                 hands.setOptions({maxNumHands: 1, minDetectionConfidence: 0.5, modelComplexity: 0}); 
                 hands.onResults(onHandsResults);
-
-                console.log("Initializing Camera...");
-                if(!window.Camera) throw new Error("Camera library not found after script load");
-
-                cameraPipe = new window.Camera(preview, {
-                    onFrame: async () => { if(isCamActive) await hands.send({image: preview}); },
-                    width: 320, height: 240
-                });
-                
+                cameraPipe = new window.Camera(preview, { onFrame: async () => { if(isCamActive) await hands.send({image: preview}); }, width: 320, height: 240 });
                 await cameraPipe.start();
-                console.log("Camera started successfully.");
-                
-                isCamActive = true;
-                if(btn) {
-                    btn.innerText = "🛑 停止摄像头";
-                    btn.classList.add('active');
-                } 
-                document.getElementById('gesture-state').innerText = "Active";
-                document.getElementById('btn-retry-cam').style.display = 'none';
-
+                isCamActive = true; if(btn) { btn.innerText = "🛑 停止摄像头"; btn.classList.add('active'); } document.getElementById('gesture-state').innerText = "Active"; document.getElementById('btn-retry-cam').style.display = 'none';
             } catch(e) {
-                console.error("Camera Init Error:", e);
-                let errorMsg = "未知错误";
-                
-                if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') {
-                    errorMsg = "权限被拒绝。请在浏览器地址栏点击'锁'图标或设置中允许摄像头访问。";
-                } else if (e.name === 'NotFoundError' || e.name === 'DevicesNotFoundError') {
-                    errorMsg = "未找到摄像头设备，请检查连接。";
-                } else if (e.name === 'NotReadableError' || e.name === 'TrackStartError') {
-                    errorMsg = "摄像头可能被其他应用占用（如Zoom、腾讯会议），请先关闭它们。";
-                } else if (window.location.protocol === 'file:') {
-                    errorMsg = "安全限制：无法在本地文件(file://)中启动摄像头。\n请使用 VS Code 的 'Live Server' 插件打开，或部署到 HTTPS 网站。";
-                } else {
-                    errorMsg = "加载失败: " + (e.message || "网络或兼容性问题。请检查控制台(F12)获取更多信息。");
-                }
-                
-                alert("摄像头启动失败:\n" + errorMsg);
-                
-                document.getElementById('gesture-state').innerText = "Error";
-                if(btn) {
-                    btn.innerText = "启动摄像头";
-                    document.getElementById('btn-retry-cam').style.display = 'inline-block';
-                    document.getElementById('btn-retry-cam').onclick = () => { window.mediaPipeInitializing = false; initMediaPipe(); };
-                }
-            }
-            window.mediaPipeInitializing = false;
+                console.error("Camera Init Error:", e); let errorMsg = "未知错误";
+                if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') { errorMsg = "权限被拒绝。请在浏览器地址栏点击'锁'图标或设置中允许摄像头访问。"; } else if (e.name === 'NotFoundError' || e.name === 'DevicesNotFoundError') { errorMsg = "未找到摄像头设备，请检查连接。"; } else if (e.name === 'NotReadableError' || e.name === 'TrackStartError') { errorMsg = "摄像头可能被其他应用占用（如Zoom、腾讯会议），请先关闭它们。"; } else if (window.location.protocol === 'file:') { errorMsg = "安全限制：无法在本地文件(file://)中启动摄像头。\n请使用 VS Code 的 'Live Server' 插件打开，或部署到 HTTPS 网站。"; } else { errorMsg = "加载失败: " + (e.message || "网络或兼容性问题。请检查控制台(F12)获取更多信息。"); }
+                alert("摄像头启动失败:\n" + errorMsg); document.getElementById('gesture-state').innerText = "Error"; if(btn) { btn.innerText = "启动摄像头"; document.getElementById('btn-retry-cam').style.display = 'inline-block'; document.getElementById('btn-retry-cam').onclick = () => { window.mediaPipeInitializing = false; initMediaPipe(); }; }
+            } window.mediaPipeInitializing = false;
         }
         window.initMediaPipe = initMediaPipe;
 
         function onHandsResults(results) {
-             // Basic validity check
              if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) return;
-             
-             const landmarks = results.multiHandLandmarks[0];
-             // Ensure we have enough landmarks (MediaPipe Hands has 21)
-             if (!landmarks || landmarks.length < 21) return;
-
-             const thumb = landmarks[4]; 
-             const index = landmarks[8];
-             const middle = landmarks[9]; // Hand centroid approx
-
-             if (!thumb || !index || !middle) return;
-
-             // 计算拇指和食指的距离
+             const landmarks = results.multiHandLandmarks[0]; if (!landmarks || landmarks.length < 21) return;
+             const thumb = landmarks[4]; const index = landmarks[8]; const middle = landmarks[9]; if (!thumb || !index || !middle) return;
              const pinch = Math.sqrt(Math.pow(thumb.x-index.x, 2) + Math.pow(thumb.y-index.y, 2));
-             
-             // Smoothing the pointer movement
-             const rawX = (1 - index.x) * 2 - 1;
-             const rawY = -index.y * 2 + 1;
-             targetHandPointer.x = rawX; targetHandPointer.y = rawY;
-             
+             const rawX = (1 - index.x) * 2 - 1; const rawY = -index.y * 2 + 1; targetHandPointer.x = rawX; targetHandPointer.y = rawY;
              handCentroid.set(middle.x, middle.y);
-             
-             // Improved Gesture Detection (4 Fingers)
-             let fingersClosed = 0;
-             const tips = [8, 12, 16, 20];
-             const pips = [6, 10, 14, 18];
-             
-             for(let i=0; i<4; i++) {
-                 // Safety check for landmarks in loop
-                 if (landmarks[tips[i]] && landmarks[pips[i]]) {
-                     if (landmarks[tips[i]].y > landmarks[pips[i]].y) fingersClosed++;
-                 }
-             }
-             
-             // Detection Logic
-             const isFist = fingersClosed >= 3; 
-             const isOpen = fingersClosed <= 1; 
-             
-             // --- 核心修复：更稳定的状态机 ---
-             const now = Date.now();
-             // 如果刚刚发生了状态切换，给 500ms 的冷却时间，防止反复跳变
-             if (now - lastStateChangeTime < 500) return;
-
-             // 1. 照片选择 (微观交互)
-             // 条件：在 EXPLODE 状态 + 指针悬停在照片上 + (捏合距离够小 或 握拳)
-             if (currentState === STATE.EXPLODE && hoveredPhoto) {
-                 if (pinch < CONFIG.pinchStart || isFist) {
-                     transitionTo(STATE.PHOTO, hoveredPhoto);
-                     lastStateChangeTime = now;
-                     return; 
-                 }
-             }
-
-             // 2. 照片归位 (Deselect)
-             // 条件：在 PHOTO 状态 + 捏合距离变大 (即松手)
-             // 修复点：这里不再使用 isOpen 判断，因为捏合手势本身常被误判为 isOpen
-             if (currentState === STATE.PHOTO) {
-                 // 只有当捏合距离明确变大（手指张开）时才退出
-                 // 阈值稍微放宽一点 (0.12) 以增加容错
-                 if (pinch > 0.12) { 
-                     transitionTo(STATE.EXPLODE);
-                     lastStateChangeTime = now;
-                 }
-                 return; // 只要在看照片，就锁定在这里，不执行后面的星球逻辑
-             }
-             
-             // 3. 全局星球控制 (宏观交互)
-             // 只有不在看照片、也没在捏合时才检测
+             let fingersClosed = 0; const tips = [8, 12, 16, 20]; const pips = [6, 10, 14, 18];
+             for(let i=0; i<4; i++) { if (landmarks[tips[i]] && landmarks[pips[i]]) { if (landmarks[tips[i]].y > landmarks[pips[i]].y) fingersClosed++; } }
+             const isFist = fingersClosed >= 3; const isOpen = fingersClosed <= 1; 
+             const now = Date.now(); if (now - lastStateChangeTime < 500) return;
+             if (currentState === STATE.EXPLODE && hoveredPhoto) { if (pinch < CONFIG.pinchStart || isFist) { transitionTo(STATE.PHOTO, hoveredPhoto); lastStateChangeTime = now; return; } }
+             if (currentState === STATE.PHOTO) { if (pinch > 0.12) { transitionTo(STATE.EXPLODE); lastStateChangeTime = now; } return; }
              if(!isPinching && currentState !== STATE.PHOTO) {
-                 // 捏拳 -> 聚拢
-                 if(isFist && currentState !== STATE.PLANET) {
-                     transitionTo(STATE.PLANET);
-                     lastStateChangeTime = now;
-                 }
-                 
-                 // 松手 -> 散开
-                 if(isOpen && currentState !== STATE.EXPLODE) {
-                     transitionTo(STATE.EXPLODE);
-                     lastStateChangeTime = now;
-                 }
-                 
-                 if(currentState === STATE.EXPLODE) { 
-                     const cx = handCentroid.x - 0.5; 
-                     if(Math.abs(cx) > CONFIG.camDeadZone) contentGroup.rotation.y += (cx>0?1:-1) * 0.02; 
-                 }
+                 if(isFist && currentState !== STATE.PLANET) { transitionTo(STATE.PLANET); lastStateChangeTime = now; }
+                 if(isOpen && currentState !== STATE.EXPLODE) { transitionTo(STATE.EXPLODE); lastStateChangeTime = now; }
+                 if(currentState === STATE.EXPLODE) { const cx = handCentroid.x - 0.5; if(Math.abs(cx) > CONFIG.camDeadZone) contentGroup.rotation.y += (cx>0?1:-1) * 0.02; }
              }
         }
 
-        // --- Main Scene Setup ---
         function init3DWorld() {
             const container = document.getElementById('canvas-container');
-            scene = new THREE.Scene(); 
-            scene.fog = new THREE.FogExp2(0x050011, 0.002); 
-            
-            contentGroup = new THREE.Group(); 
-            orbitGroup = new THREE.Group(); 
-            starGroup = new THREE.Group();    
-            scene.add(starGroup); scene.add(contentGroup); scene.add(orbitGroup);
-            
-            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 2000); 
-            camera.position.set(0, 60, 300); 
-            
-            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" }); 
-            renderer.setSize(window.innerWidth, window.innerHeight); 
-            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // Limit pixel ratio for performance
-            
-            // Color Correction
-            renderer.toneMapping = THREE.ACESFilmicToneMapping; 
-            renderer.toneMappingExposure = CONFIG.exposureNormal; 
-            renderer.outputColorSpace = THREE.SRGBColorSpace;
-            
-            // Shadows (Expert Upgrade)
-            renderer.shadowMap.enabled = true;
-            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-
-            container.appendChild(renderer.domElement);
-            
-            // Lighting Setup
-            const hemiLight = new THREE.HemisphereLight(0xE0B0FF, 0xFF1493, 0.6); 
-            scene.add(hemiLight);
-            
-            ambientLight = new THREE.AmbientLight(0xFFE4E1, CONFIG.ambientIntensity); 
-            scene.add(ambientLight);
-            
-            const mainLight = new THREE.DirectionalLight(0xFFFFFF, 1.5); 
-            mainLight.position.set(50, 80, 50); 
-            mainLight.castShadow = true;
-            mainLight.shadow.mapSize.width = 2048;
-            mainLight.shadow.mapSize.height = 2048;
-            mainLight.shadow.camera.near = 0.5;
-            mainLight.shadow.camera.far = 500;
-            const d = 50;
-            mainLight.shadow.camera.left = -d; mainLight.shadow.camera.right = d; mainLight.shadow.camera.top = d; mainLight.shadow.camera.bottom = -d;
-            mainLight.shadow.bias = -0.0001;
-            scene.add(mainLight);
-            
-            const fillLight = new THREE.DirectionalLight(0xFFB7C5, 0.8); 
-            fillLight.position.set(-50, 20, 50); 
-            scene.add(fillLight);
-            
-            const backLight = new THREE.DirectionalLight(0x00FFFF, 0.8); 
-            backLight.position.set(0, -20, -50); 
-            scene.add(backLight);
-
-            // Post Processing
-            const renderScene = new RenderPass(scene, camera);
-            bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), CONFIG.bloomStrengthNormal, 0.5, 0.85);
-            bloomPass.threshold = CONFIG.bloomThreshold; 
-            bloomPass.radius = CONFIG.bloomRadius;
-            
-            composer = new EffectComposer(renderer); 
-            composer.addPass(renderScene); 
-            composer.addPass(bloomPass);
-
-            controls = new OrbitControls(camera, renderer.domElement); 
-            controls.enableDamping = true; 
-            controls.autoRotate = true; 
-            controls.autoRotateSpeed = CONFIG.spinSpeed;
-            controls.enablePan = false; 
-            controls.minPolarAngle = 1.0; 
-            controls.maxPolarAngle = 2.0;
-
-            // Events
-            window.addEventListener('resize', onWindowResize);
-            document.getElementById('image-upload').addEventListener('change', handleImageUpload);
-            
-            initWorkbench(); 
-            initPhotoWorkbench();
-            
-            createStarField(); 
-            createPlanetParticles(); 
-            createKittenCore(); 
-            createOrbitParticles(); 
-            createPiggySatellite(); 
-            createCursor(); 
-            loadEmbeddedPhotos(); 
-            
-            animate();
+            scene = new THREE.Scene(); scene.fog = new THREE.FogExp2(0x050011, 0.002); 
+            contentGroup = new THREE.Group(); orbitGroup = new THREE.Group(); starGroup = new THREE.Group(); scene.add(starGroup); scene.add(contentGroup); scene.add(orbitGroup);
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 2000); camera.position.set(0, 60, 300); 
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" }); renderer.setSize(window.innerWidth, window.innerHeight); renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = CONFIG.exposureNormal; renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap; container.appendChild(renderer.domElement);
+            const hemiLight = new THREE.HemisphereLight(0xE0B0FF, 0xFF1493, 0.6); scene.add(hemiLight); ambientLight = new THREE.AmbientLight(0xFFE4E1, CONFIG.ambientIntensity); scene.add(ambientLight);
+            const mainLight = new THREE.DirectionalLight(0xFFFFFF, 1.5); mainLight.position.set(50, 80, 50); mainLight.castShadow = true; mainLight.shadow.mapSize.width = 2048; mainLight.shadow.mapSize.height = 2048; mainLight.shadow.camera.near = 0.5; mainLight.shadow.camera.far = 500; const d = 50; mainLight.shadow.camera.left = -d; mainLight.shadow.camera.right = d; mainLight.shadow.camera.top = d; mainLight.shadow.camera.bottom = -d; mainLight.shadow.bias = -0.0001; scene.add(mainLight);
+            const fillLight = new THREE.DirectionalLight(0xFFB7C5, 0.8); fillLight.position.set(-50, 20, 50); scene.add(fillLight); const backLight = new THREE.DirectionalLight(0x00FFFF, 0.8); backLight.position.set(0, -20, -50); scene.add(backLight);
+            const renderScene = new RenderPass(scene, camera); bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), CONFIG.bloomStrengthNormal, 0.5, 0.85); bloomPass.threshold = CONFIG.bloomThreshold; bloomPass.radius = CONFIG.bloomRadius;
+            composer = new EffectComposer(renderer); composer.addPass(renderScene); composer.addPass(bloomPass);
+            controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true; controls.autoRotate = true; controls.autoRotateSpeed = CONFIG.spinSpeed; controls.enablePan = false; controls.minPolarAngle = 1.0; controls.maxPolarAngle = 2.0;
+            window.addEventListener('resize', onWindowResize); document.getElementById('image-upload').addEventListener('change', handleImageUpload);
+            initWorkbench(); initPhotoWorkbench(); createStarField(); createPlanetParticles(); createKittenCore(); createOrbitParticles(); createPiggySatellite(); createCursor(); loadEmbeddedPhotos(); animate();
         }
-        
-        function onWindowResize() {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            composer.setSize(window.innerWidth, window.innerHeight);
-        }
-
-        // --- UI & Logic ---
+        function onWindowResize() { camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight); composer.setSize(window.innerWidth, window.innerHeight); }
         function initWorkbench() {
-            // Helper to apply brightness multipliers
-            const updateSceneBrightness = () => {
-                const master = CONFIG.masterBrightness;
-                
-                // Plush
-                particleMeshes.forEach(m => {
-                    if (m.material) m.material.emissiveIntensity = CONFIG.plushBrightness * master;
-                });
-                
-                // Kitten Core
-                if (coreGroup) {
-                    coreGroup.children.forEach(child => {
-                        // Check for materials with emissive property (MeshPhysicalMaterial, MeshStandardMaterial)
-                        if (child.material && child.material.emissive) {
-                            // Apply base intensity * master
-                            // Note: We need to know the base intensity. 
-                            // Since we don't store base separately on the mesh, we use CONFIG value
-                            // This assumes all core parts share the same base kittenBrightness setting
-                            child.material.emissiveIntensity = CONFIG.kittenBrightness * master;
-                        }
-                    });
-                }
-                
-                // Piggy Satellite
-                if (satelliteGroup) {
-                    satelliteGroup.children.forEach(child => {
-                         if (child.material && child.material.emissive) {
-                             // Piggy has a hardcoded base intensity of 0.2 in createPiggySatellite
-                             // We don't have a specific slider for Piggy Brightness (only scale), 
-                             // but let's say it follows Ambient or just Master
-                             child.material.emissiveIntensity = 0.2 * master;
-                         }
-                    });
-                }
-                
-                // Clouds & Rainbows (Orbit Group)
-                if (orbitMeshes.length > 0) {
-                    // Rainbow (Index 0) - opacity control
-                    const rainbow = orbitMeshes[0];
-                    if (rainbow && rainbow.material) {
-                        rainbow.material.opacity = CONFIG.rainbowIntensity * 0.5 * master;
-                    }
-                    
-                    // Cloud (Index 1) - emissive
-                    const cloud = orbitMeshes[1];
-                    if (cloud && cloud.material) {
-                        cloud.material.emissiveIntensity = CONFIG.cloudBrightness * master;
-                    }
-                }
-                
-                // Ambient Light
-                if (ambientLight) {
-                    ambientLight.intensity = CONFIG.ambientIntensity * master;
-                }
-            };
-
-            // Slider Logic with Master Multiplier
-            const mapSlider = (id, configKey) => {
-                const el = document.getElementById(id);
-                if(!el) return;
-                el.addEventListener('input', (e) => {
-                    const v = parseFloat(e.target.value);
-                    CONFIG[configKey] = v;
-                    
-                    // Update display value
-                    const disp = el.parentElement.querySelector('span');
-                    if(disp) disp.innerText = v.toFixed(1);
-                    
-                    // Trigger global update
-                    updateSceneBrightness();
-                    
-                    // Special case: Spin Speed is not a brightness setting
-                    if (configKey === 'spinSpeed') {
-                        controls.autoRotateSpeed = v;
-                    }
-                    // Special case: Piggy Scale
-                    if (configKey === 'piggyScale' && satelliteGroup) {
-                        satelliteGroup.scale.setScalar(v);
-                    }
-                });
-            };
-            
-            // Register Listeners
-            const masterSlider = document.getElementById('sl-master');
-            if(masterSlider) {
-                masterSlider.addEventListener('input', (e) => {
-                    CONFIG.masterBrightness = parseFloat(e.target.value);
-                    document.getElementById('val-master').innerText = CONFIG.masterBrightness.toFixed(1);
-                    updateSceneBrightness();
-                });
-            }
-
-            mapSlider('sl-plush', 'plushBrightness');
-            mapSlider('sl-kitten', 'kittenBrightness');
-            mapSlider('sl-piggy', 'piggyScale');
-            mapSlider('sl-cloud', 'cloudBrightness');
-            mapSlider('sl-rainbow', 'rainbowIntensity');
-            mapSlider('sl-env', 'ambientIntensity');
-            mapSlider('sl-spin', 'spinSpeed');
-            
-            const btnToggle = document.getElementById('btn-toggle-wb');
-            const wb = document.getElementById('workbench');
-            if(btnToggle) btnToggle.onclick = () => { wb.style.display = (wb.style.display === 'none') ? 'block' : 'none'; };
+            const updateSceneBrightness = () => { const master = CONFIG.masterBrightness; particleMeshes.forEach(m => { if (m.material) m.material.emissiveIntensity = CONFIG.plushBrightness * master; }); if (coreGroup) { coreGroup.children.forEach(child => { if (child.material && child.material.emissive) { child.material.emissiveIntensity = CONFIG.kittenBrightness * master; } }); } if (satelliteGroup) { satelliteGroup.children.forEach(child => { if (child.material && child.material.emissive) { child.material.emissiveIntensity = 0.2 * master; } }); } if (orbitMeshes.length > 0) { const rainbow = orbitMeshes[0]; if (rainbow && rainbow.material) { rainbow.material.opacity = CONFIG.rainbowIntensity * 0.5 * master; } const cloud = orbitMeshes[1]; if (cloud && cloud.material) { cloud.material.emissiveIntensity = CONFIG.cloudBrightness * master; } } if (ambientLight) { ambientLight.intensity = CONFIG.ambientIntensity * master; } };
+            const mapSlider = (id, configKey) => { const el = document.getElementById(id); if(!el) return; el.addEventListener('input', (e) => { const v = parseFloat(e.target.value); CONFIG[configKey] = v; const disp = el.parentElement.querySelector('span'); if(disp) disp.innerText = v.toFixed(1); updateSceneBrightness(); if (configKey === 'spinSpeed') { controls.autoRotateSpeed = v; } if (configKey === 'piggyScale' && satelliteGroup) { satelliteGroup.scale.setScalar(v); } }); };
+            const masterSlider = document.getElementById('sl-master'); if(masterSlider) { masterSlider.addEventListener('input', (e) => { CONFIG.masterBrightness = parseFloat(e.target.value); document.getElementById('val-master').innerText = CONFIG.masterBrightness.toFixed(1); updateSceneBrightness(); }); }
+            mapSlider('sl-plush', 'plushBrightness'); mapSlider('sl-kitten', 'kittenBrightness'); mapSlider('sl-piggy', 'piggyScale'); mapSlider('sl-cloud', 'cloudBrightness'); mapSlider('sl-rainbow', 'rainbowIntensity'); mapSlider('sl-env', 'ambientIntensity'); mapSlider('sl-spin', 'spinSpeed');
+            const btnToggle = document.getElementById('btn-toggle-wb'); const wb = document.getElementById('workbench'); if(btnToggle) btnToggle.onclick = () => { wb.style.display = (wb.style.display === 'none') ? 'block' : 'none'; };
         }
-
-        function initPhotoWorkbench() {
-             const sliderBright = document.getElementById('slider-photo-bright');
-             const sliderExp = document.getElementById('slider-photo-exp');
-             sliderBright.addEventListener('input', (e) => {
-                 CONFIG.photoBrightnessDim = parseFloat(e.target.value);
-                 if(grabbedPhoto) { const m = grabbedPhoto.children.find(c=>c.name==="photo_surface"); if(m) m.material.color.setScalar(CONFIG.photoBrightnessDim); }
-             });
-             sliderExp.addEventListener('input', (e) => {
-                 CONFIG.exposurePhoto = parseFloat(e.target.value);
-                 if(currentState === STATE.PHOTO) renderer.toneMappingExposure = CONFIG.exposurePhoto;
-             });
-        }
-
-        // --- Animation & States ---
+        function initPhotoWorkbench() { const sliderBright = document.getElementById('slider-photo-bright'); const sliderExp = document.getElementById('slider-photo-exp'); sliderBright.addEventListener('input', (e) => { CONFIG.photoBrightnessDim = parseFloat(e.target.value); if(grabbedPhoto) { const m = grabbedPhoto.children.find(c=>c.name==="photo_surface"); if(m) m.material.color.setScalar(CONFIG.photoBrightnessDim); } }); sliderExp.addEventListener('input', (e) => { CONFIG.exposurePhoto = parseFloat(e.target.value); if(currentState === STATE.PHOTO) renderer.toneMappingExposure = CONFIG.exposurePhoto; }); }
+        
         function animate() {
-            requestAnimationFrame(animate);
-            TWEEN.update(); 
-            controls.update(); 
-            smoothHandPointer.lerp(targetHandPointer, 0.3);
-
-            if(currentState === STATE.PLANET) {
-                orbitGroup.rotation.y += 0.002; 
-                orbitGroup.rotation.z = Math.sin(Date.now()*0.0005)*0.05; 
-                if(satelliteGroup) {
-                    const time = Date.now() * 0.0005; const r = 90; 
-                    satelliteGroup.position.x = Math.cos(time) * r; satelliteGroup.position.z = Math.sin(time) * r; satelliteGroup.position.y = Math.sin(time * 2) * 20; 
-                    satelliteGroup.lookAt(0,0,0); satelliteGroup.rotateZ(time); 
-                }
-                if(coreGroup) {
-                    const s = 1 + Math.sin(Date.now() * 0.002) * 0.02; coreGroup.scale.setScalar(s); coreGroup.rotation.y -= 0.005; 
-                }
-            }
-
-            // Raycasting logic for interactivity
+            requestAnimationFrame(animate); TWEEN.update(); controls.update(); smoothHandPointer.lerp(targetHandPointer, 0.3);
+            if(currentState === STATE.PLANET) { orbitGroup.rotation.y += 0.002; orbitGroup.rotation.z = Math.sin(Date.now()*0.0005)*0.05; if(satelliteGroup) { const time = Date.now() * 0.0005; const r = 90; satelliteGroup.position.x = Math.cos(time) * r; satelliteGroup.position.z = Math.sin(time) * r; satelliteGroup.position.y = Math.sin(time * 2) * 20; satelliteGroup.lookAt(0,0,0); satelliteGroup.rotateZ(time); } if(coreGroup) { const s = 1 + Math.sin(Date.now() * 0.002) * 0.02; coreGroup.scale.setScalar(s); coreGroup.rotation.y -= 0.005; } }
             if (cursorMesh) {
-                raycaster.setFromCamera(smoothHandPointer, camera);
-                const defaultCursorPos = raycaster.ray.origin.clone().add(raycaster.ray.direction.multiplyScalar(CONFIG.cursorDistance));
-                cursorMesh.position.copy(defaultCursorPos); cursorMesh.lookAt(camera.position);
-                
-                // Cursor Visibility: Only visible in EXPLODE state (Hide in PHOTO mode)
-                cursorMesh.visible = currentState === STATE.EXPLODE;
-
-                if (currentState !== STATE.PLANET && photoObjects.length > 0 && !isPinching && currentState !== STATE.PHOTO) {
-                      const intersects = raycaster.intersectObjects(photoObjects, true);
-                      if (intersects.length > 0) {
-                          let target = intersects[0].object; while(target.parent && target.parent !== contentGroup) target = target.parent;
-                          
-                          // --- Magnetic Effect (磁吸体感) ---
-                          cursorMesh.position.copy(intersects[0].point); 
-                          
-                          if(hoveredPhoto !== target) {
-                              if(hoveredPhoto) new TWEEN.Tween(hoveredPhoto.scale).to({x:1, y:1, z:1}, 200).start();
-                              hoveredPhoto = target; 
-                              // Scale up effect
-                              new TWEEN.Tween(hoveredPhoto.scale).to({x:1.3, y:1.3, z:1.3}, 200).easing(TWEEN.Easing.Back.Out).start();
-                          }
-                      } else if (hoveredPhoto) { 
-                          new TWEEN.Tween(hoveredPhoto.scale).to({x:1, y:1, z:1}, 200).start(); hoveredPhoto = null; 
-                      }
-                }
+                raycaster.setFromCamera(smoothHandPointer, camera); const defaultCursorPos = raycaster.ray.origin.clone().add(raycaster.ray.direction.multiplyScalar(CONFIG.cursorDistance)); cursorMesh.position.copy(defaultCursorPos); cursorMesh.lookAt(camera.position); cursorMesh.visible = currentState === STATE.EXPLODE;
+                if (currentState !== STATE.PLANET && photoObjects.length > 0 && !isPinching && currentState !== STATE.PHOTO) { const intersects = raycaster.intersectObjects(photoObjects, true); if (intersects.length > 0) { let target = intersects[0].object; while(target.parent && target.parent !== contentGroup) target = target.parent; cursorMesh.position.copy(intersects[0].point); if(hoveredPhoto !== target) { if(hoveredPhoto) new TWEEN.Tween(hoveredPhoto.scale).to({x:1, y:1, z:1}, 200).start(); hoveredPhoto = target; new TWEEN.Tween(hoveredPhoto.scale).to({x:1.3, y:1.3, z:1.3}, 200).easing(TWEEN.Easing.Back.Out).start(); } } else if (hoveredPhoto) { new TWEEN.Tween(hoveredPhoto.scale).to({x:1, y:1, z:1}, 200).start(); hoveredPhoto = null; } }
             }
-            
-            // --- 核心修改：沉浸式照片查看逻辑 (Immersive View) ---
             if (currentState === STATE.PHOTO && grabbedPhoto) {
-                // 1. 确保矩阵是最新的，防止计算偏差
-                camera.updateMatrixWorld();
-                contentGroup.updateMatrixWorld();
-
-                // 2. 计算目标位置：相机正前方固定距离
-                // 使用较大的距离确保照片不会被相机近裁剪面裁剪
-                const viewDistance = 40; 
-                const camDir = new THREE.Vector3(); 
-                camera.getWorldDirection(camDir);
-                const targetWorldPos = camera.position.clone().add(camDir.multiplyScalar(viewDistance));
-                
-                // 3. 坐标转换：世界坐标 -> contentGroup 本地坐标
-                // 这样无论 contentGroup 怎么旋转，照片都能准确停在相机面前
-                const parentInverse = contentGroup.matrixWorld.clone().invert(); 
-                const targetLocalPos = targetWorldPos.applyMatrix4(parentInverse);
-                
-                // 4. 移动照片：增加 lerp 速度 (0.25) 让跟随更紧手，减少拖拽感
+                camera.updateMatrixWorld(); contentGroup.updateMatrixWorld();
+                const viewDistance = 40; const camDir = new THREE.Vector3(); camera.getWorldDirection(camDir); const targetWorldPos = camera.position.clone().add(camDir.multiplyScalar(viewDistance));
+                const parentInverse = contentGroup.matrixWorld.clone().invert(); const targetLocalPos = targetWorldPos.applyMatrix4(parentInverse);
                 grabbedPhoto.position.lerp(targetLocalPos, 0.25); 
-                
-                // 5. 姿态锁定：让照片平面完全平行于相机平面
-                // 相比 lookAt，使用四元数拷贝能保证照片绝对水平端正，不会有透视歪斜
-                // 计算：照片旋转 = 相机旋转 * 父级逆旋转 (抵消父级影响)
-                const targetRot = camera.quaternion.clone().premultiply(contentGroup.quaternion.clone().invert());
-                grabbedPhoto.quaternion.slerp(targetRot, 0.25);
-            }
-            composer.render();
+                const targetRot = camera.quaternion.clone().premultiply(contentGroup.quaternion.clone().invert()); grabbedPhoto.quaternion.slerp(targetRot, 0.25);
+            } composer.render();
         }
 
         function transitionTo(newState, targetObj = null) {
-            // 防止在相同状态下重复触发 (Debounce)
             if (currentState === newState && grabbedPhoto === targetObj) return;
-
-            isTransitioning = true; currentState = newState;
-            const wb = document.getElementById('photo-workbench');
-
-            if (newState === STATE.PHOTO) {
-                if(wb) wb.style.display = 'block';
-                // 进入照片模式：暂停自动旋转，提供稳定观感
-                controls.autoRotate = false;
-                
-                new TWEEN.Tween(renderer).to({ toneMappingExposure: CONFIG.exposurePhoto }, 800).start();
-                new TWEEN.Tween(bloomPass).to({ strength: CONFIG.bloomStrengthPhoto }, 800).start();
-            } else {
-                if(wb) wb.style.display = 'none';
-                // 退出照片模式：恢复旋转
-                controls.autoRotate = true; 
-
-                new TWEEN.Tween(renderer).to({ toneMappingExposure: CONFIG.exposureNormal }, 800).start();
-                new TWEEN.Tween(bloomPass).to({ strength: CONFIG.bloomStrengthNormal }, 800).start();
-            }
-
-            if(targetObj) {
-                grabbedPhoto = targetObj;
-                // 选中时放大，提升视觉中心感
-                new TWEEN.Tween(grabbedPhoto.scale).to({x: 1.5, y: 1.5, z: 1.5}, 500).easing(TWEEN.Easing.Cubic.Out).start();
-            } else {
-                grabbedPhoto = null;
-                photoObjects.forEach(p => {
-                    // Reset Scale
-                    new TWEEN.Tween(p.scale).to({x:1, y:1, z:1}, 500).start();
-                    
-                    if(newState === STATE.PLANET) { 
-                        // Back to Original Position
-                        new TWEEN.Tween(p.position).to(p.userData.originalPos, 1000).easing(TWEEN.Easing.Back.Out).start(); 
-                        new TWEEN.Tween(p.scale).to({x:0, y:0, z:0}, 1000).start();
-                    } 
-                    else if (newState === STATE.EXPLODE) { 
-                        const expPos = p.userData.originalPos.clone().multiplyScalar(1.5); 
-                        new TWEEN.Tween(p.position).to(expPos, 1000).easing(TWEEN.Easing.Cubic.Out).start(); 
-                        new TWEEN.Tween(p.scale).to({x:1, y:1, z:1}, 1000).start(); 
-                    }
-                });
-            }
-
-            const targetPos = newState === STATE.PLANET ? planetPositions : explodePositions;
-            const orbitScale = newState === STATE.PLANET ? 1 : 2.5;
+            isTransitioning = true; currentState = newState; const wb = document.getElementById('photo-workbench');
+            if (newState === STATE.PHOTO) { if(wb) wb.style.display = 'block'; controls.autoRotate = false; new TWEEN.Tween(renderer).to({ toneMappingExposure: CONFIG.exposurePhoto }, 800).start(); new TWEEN.Tween(bloomPass).to({ strength: CONFIG.bloomStrengthPhoto }, 800).start(); } else { if(wb) wb.style.display = 'none'; controls.autoRotate = true; new TWEEN.Tween(renderer).to({ toneMappingExposure: CONFIG.exposureNormal }, 800).start(); new TWEEN.Tween(bloomPass).to({ strength: CONFIG.bloomStrengthNormal }, 800).start(); }
+            if(targetObj) { grabbedPhoto = targetObj; new TWEEN.Tween(grabbedPhoto.scale).to({x: 1.5, y: 1.5, z: 1.5}, 500).easing(TWEEN.Easing.Cubic.Out).start(); } else { grabbedPhoto = null; photoObjects.forEach(p => { new TWEEN.Tween(p.scale).to({x:1, y:1, z:1}, 500).start(); if(newState === STATE.PLANET) { new TWEEN.Tween(p.position).to(p.userData.originalPos, 1000).easing(TWEEN.Easing.Back.Out).start(); new TWEEN.Tween(p.scale).to({x:0, y:0, z:0}, 1000).start(); } else if (newState === STATE.EXPLODE) { const expPos = p.userData.originalPos.clone().multiplyScalar(1.5); new TWEEN.Tween(p.position).to(expPos, 1000).easing(TWEEN.Easing.Cubic.Out).start(); new TWEEN.Tween(p.scale).to({x:1, y:1, z:1}, 1000).start(); } }); }
             
-            new TWEEN.Tween({ t: 0 }).to({ t: 1 }, 1500).easing(TWEEN.Easing.Cubic.InOut)
-                .onUpdate(({ t }) => {
-                    let idx = 0; 
-                    particleMeshes.forEach(mesh => {
-                        for(let i=0; i<mesh.count; i++) {
-                            // Interpolate only if target exists
-                            if(idx < targetPos.length) {
-                                const start = newState === STATE.PLANET ? explodePositions[idx] : planetPositions[idx];
-                                const end = targetPos[idx];
-                                dummy.position.lerpVectors(start, end, t); 
-                                dummy.rotation.set(t*Math.PI, t*Math.PI, 0); 
-                                dummy.updateMatrix(); mesh.setMatrixAt(i, dummy.matrix); 
-                                idx++;
-                            }
-                        }
-                        mesh.instanceMatrix.needsUpdate = true;
-                    });
-                    orbitGroup.scale.setScalar(1 + (orbitScale-1)*t);
-                    if(coreGroup) { coreGroup.scale.setScalar(1); }
-                }).onComplete(() => { isTransitioning = false; previousState = newState; }).start();
+            const targetPos = newState === STATE.PLANET ? planetPositions : explodePositions; 
+            // 修改：将扩散倍数从 2.5 提升到 5.0，让云朵飞到相机身后，完全不遮挡视线
+            const orbitScale = newState === STATE.PLANET ? 1 : 5.0;
+            
+            new TWEEN.Tween({ t: 0 }).to({ t: 1 }, 1500).easing(TWEEN.Easing.Cubic.InOut).onUpdate(({ t }) => { let idx = 0; particleMeshes.forEach(mesh => { for(let i=0; i<mesh.count; i++) { if(idx < targetPos.length) { const start = newState === STATE.PLANET ? explodePositions[idx] : planetPositions[idx]; const end = targetPos[idx]; dummy.position.lerpVectors(start, end, t); dummy.rotation.set(t*Math.PI, t*Math.PI, 0); dummy.updateMatrix(); mesh.setMatrixAt(i, dummy.matrix); idx++; } } mesh.instanceMatrix.needsUpdate = true; }); orbitGroup.scale.setScalar(1 + (orbitScale-1)*t); if(coreGroup) { coreGroup.scale.setScalar(1); } }).onComplete(() => { isTransitioning = false; previousState = newState; }).start();
         }
+
+        // --- Event Listeners Init ---
+        // New explicit function to bind events
+        function initListeners() {
+            const startBtn = document.getElementById('start-gift-btn');
+            if(startBtn) startBtn.addEventListener('click', openGift);
+
+            const skipBtn = document.getElementById('skip-intro-btn');
+            if(skipBtn) skipBtn.addEventListener('click', endIntro);
+
+            const crawlText = document.getElementById('crawl-text');
+            if(crawlText) crawlText.addEventListener('animationend', endIntro);
+
+            const saveBtn = document.getElementById('btn-save-page');
+            if(saveBtn) saveBtn.addEventListener('click', savePage);
+
+            const camBtn = document.getElementById('btn-start-cam');
+            if(camBtn) camBtn.addEventListener('click', initMediaPipe);
+            
+            // Note: btn-retry-cam onclick is set dynamically inside initMediaPipe error handler
+        }
+
+        // Initialize listeners immediately
+        initListeners();
 
     </script>
 </body>
